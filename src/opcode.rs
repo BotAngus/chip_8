@@ -40,8 +40,6 @@ impl Opcode {
 
 impl From<(u8, u8)> for Opcode {
     fn from((a, b): (u8, u8)) -> Self {
-        Opcode {
-            0: (a as u16) << 8 | b as u16,
-        }
+        Opcode((a as u16) << 8 | b as u16)
     }
 }

@@ -199,7 +199,7 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
                         self.v_reg[opcode.x()].overflowing_sub(self.v_reg[opcode.y()]);
 
                     self.v_reg[opcode.x()] = value;
-                    self.v_reg[0x0F] = underflow as u8;
+                    self.v_reg[0x0F] = u8::from(underflow);
                 }
 
                 // 8XY6 Stores the least significant bit of VX in VF and then shifts VX to the right by 1
@@ -213,7 +213,7 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
                         self.v_reg[opcode.y()].overflowing_sub(self.v_reg[opcode.x()]);
 
                     self.v_reg[opcode.y()] = value;
-                    self.v_reg[0x0F] = underflow as u8;
+                    self.v_reg[0x0F] = u8::from(underflow);
                 }
 
                 // 8XY8 Stores the most significant bit of VX in VF and then shifts VX to the left by 1

@@ -1,5 +1,4 @@
 #![deny(clippy::all)]
-
 use std::io::Read;
 
 mod chip8;

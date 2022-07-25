@@ -1,4 +1,6 @@
-use std::time::{Duration, SystemTime};
+use std::{
+    time::{Duration, SystemTime},
+};
 
 #[allow(dead_code)]
 pub struct Chip8<const R: usize = 4096, const X: usize = 128, const Y: usize = 64> {
@@ -16,7 +18,7 @@ pub struct Chip8<const R: usize = 4096, const X: usize = 128, const Y: usize = 6
     /// Variable registers
     v_reg: [u8; 16],
     /// 12/16-bit stack
-    stack: [u16; 32],
+    stack: Stack,
 
     /// 60Hz
     delay_timer: Duration,
@@ -32,7 +34,7 @@ macro_rules! new {
 pub(crate) use new;
 use sdl2::{pixels::Color, rect::Point};
 
-use crate::opcode::Opcode;
+use crate::{opcode::Opcode, stack::Stack};
 #[allow(dead_code)]
 impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
     pub fn new() -> Chip8<R, X, Y> {
@@ -44,7 +46,7 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
             draw: false,
             i_reg: 0,
             v_reg: [0; 16],
-            stack: [0; 32],
+            stack: Stack::<32>::new(),
             delay_timer: Duration::from_secs_f32(1.0 / 60.0),
             sound_timer: Duration::from_secs_f32(1.0 / 60.0),
         };
@@ -62,45 +64,47 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
         self.memory[0x200..(0x200 + input.len())].copy_from_slice(input);
     }
 
-    pub fn run(mut self, scale: u32) {
+    pub fn run(mut self, scale: u32) -> Result<(), Box<dyn std::error::Error>> {
         let (tx, rx) = std::sync::mpsc::channel::<[[u8; Y]; X]>();
 
         // let delay_time = self.delay_timer;
         // update display
-        std::thread::spawn(move || {
-            let sdl_context = sdl2::init().unwrap();
-            let video_subsystem = sdl_context.video().unwrap();
+        std::thread::spawn(
+            move || -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+                let sdl_context = sdl2::init()?;
+                let video_subsystem = sdl_context.video()?;
 
-            let window = video_subsystem
-                .window("chip8", X as u32 * scale, Y as u32 * scale)
-                .position_centered()
-                .borderless()
-                .build()
-                .unwrap();
+                let window = video_subsystem
+                    .window("Chip-8", X as u32 * scale, Y as u32 * scale)
+                    .position_centered()
+                    .borderless()
+                    .build()?;
 
-            let mut canvas = window.into_canvas().build().unwrap();
+                let mut canvas = window.into_canvas().build()?;
 
-            canvas.set_scale(scale as f32, scale as f32).unwrap();
-            canvas.clear();
-            loop {
-                let display = rx.recv().unwrap();
-                for x in 0..display.len() {
-                    for y in 0..display[x].len() {
-                        let colour = display[x][y];
-                        canvas.set_draw_color(match colour {
-                            0 => Color::WHITE,
-                            1 => Color::BLACK,
-                            _ => unimplemented!(),
-                        });
-                        canvas.draw_point(Point::new(x as i32, y as i32)).unwrap();
+                canvas.set_scale(scale as f32, scale as f32)?;
+                canvas.clear();
+                loop {
+                    let display = rx.recv()?;
+
+                    for (x, _) in display.iter().enumerate() {
+                        for y in 0..display[x].len() {
+                            let colour = display[x][y];
+                            canvas.set_draw_color(match colour {
+                                0 => Color::WHITE,
+                                1 => Color::BLACK,
+                                _ => unimplemented!(),
+                            });
+                            canvas.draw_point(Point::new(x as i32, y as i32))?;
+                        }
                     }
+                    canvas.present();
                 }
-                canvas.present();
-            }
-        });
+            },
+        );
 
         loop {
-            std::thread::sleep(Duration::from_secs_f32(1.0 / 6.0));
+            // std::thread::sleep(Duration::from_secs_f32(1.0 / 6.0));
 
             let opcode = self.fetch();
 
@@ -109,7 +113,7 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
             if self.draw {
                 self.draw = false;
 
-                tx.send(self.display).unwrap();
+                tx.send(self.display)?;
             }
         }
     }
@@ -124,7 +128,6 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
 
     fn decode(&mut self, opcode: Opcode) {
         // Opcodes from https://en.wikipedia.org/wiki/CHIP-8
-        // Bitewise shift the opcode 12 to the right to get the first nibble (half-byte)
         match opcode.first() {
             0x0 => match opcode.as_u16() {
                 // 00E0 Clear Screen
@@ -132,8 +135,8 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
                     self.display = [[0; Y]; X];
                 }
 
-                // 00EE
-                0x00EE => todo!(),
+                // 00EE Returns from a subroutine
+                0x00EE => self.pc = self.stack.pop() as usize,
 
                 _ => {
                     unreachable!()
@@ -143,7 +146,10 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
             0x1 => self.pc = opcode.nnn() as usize,
 
             // 2NNN Call subroutine at NNN
-            0x2 => todo!(),
+            0x2 => {
+                self.stack.push(self.pc as u16);
+                self.pc = opcode.x() as usize;
+            }
 
             // 3XNN Skip next instruction (pc +=2) if VX == NN
             0x3 => {
@@ -236,13 +242,13 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
             // Jumps to the address NNN plus V0
             0xB => self.pc = opcode.nnn() as usize + self.v_reg[0x00] as usize,
 
-            // CXNN Sets VX to the result of a bitwise and operation on a random number  and NN
+            // CXNN Sets VX to the result of a bitwise and operation on a random number and NN
             0xC => {
                 self.v_reg[opcode.x()] = opcode.nn()
                     & SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .unwrap()
-                        .as_micros() as u8
+                        .as_micros() as u8;
             }
             // DXYN Draw
             0xD => {
@@ -290,9 +296,36 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
                 _ => unreachable!(),
             },
 
-            0xF => match opcode.last() {
+            0xF => match opcode.last_two() {
                 // FX07 Sets VX to the value of the delay timer
-                0x7 => todo!(),
+                0x07 => todo!(),
+
+                // FX0A A key press is awaited, and then stored in VX
+                0x0A => todo!(),
+
+                // FX15 Sets the delay timer to VX
+                0x15 => todo!(),
+
+                // FX1E Adds VX to I. VF is not affected
+                0x1E => self.pc += self.v_reg[opcode.x()] as usize,
+
+                // FX29 Sets I to the location of the sprite for the character in VX.
+                // Characters 0-F (in hexadecimal) are represented by a 4x5 font
+                0x29 => todo!(),
+
+                // FX33 Stores the binary-coded decimal representation of VX,
+                // with the most significant of three digits at the address in I,
+                // the middle digit at I plus 1, and the least significant digit at I plus 2
+                0x33 => todo!(),
+
+                // FX55 Stores from V0 to VX (including VX) in memory, starting at address I.
+                // The offset from I is increased by 1 for each value written,
+                // but I itself is left unmodified
+                0x55 => todo!(),
+
+                // Fills from V0 to VX (including VX) with values from memory, starting at address I.
+                // The offset from I is increased by 1 for each value read, but I itself is left unmodified
+                0x65 => todo!(),
 
                 _ => unreachable!(),
             },

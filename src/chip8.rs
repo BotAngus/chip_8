@@ -1,6 +1,4 @@
-use std::{
-    time::{Duration, SystemTime},
-};
+use std::{time::{Duration, SystemTime}, sync::Mutex};
 
 #[allow(dead_code)]
 pub struct Chip8<const R: usize = 4096, const X: usize = 128, const Y: usize = 64> {
@@ -67,39 +65,44 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
     pub fn run(mut self, scale: u32) -> Result<(), Box<dyn std::error::Error>> {
         let (tx, rx) = std::sync::mpsc::channel::<[[u8; Y]; X]>();
 
+        let sdl_context = sdl2::init()?;
+
+        let mut event_pump = sdl_context.event_pump()?;
+
+        let video_subsystem = sdl_context.video()?;
+        let window = video_subsystem
+            .window("Chip 8", X as u32 * scale, Y as u32 * scale)
+            .borderless()
+            .position_centered()
+            .build()?;
+        let mut canvas_mutex = Mutex::new(window.into_canvas().build()?);
+
+        
         // let delay_time = self.delay_timer;
         // update display
         std::thread::spawn(
             move || -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-                let sdl_context = sdl2::init()?;
-                let video_subsystem = sdl_context.video()?;
+                
+                event_pump.keyboard_state();
+                // canvas.set_scale(scale as f32, scale as f32)?;
+                // canvas.clear();
+                // loop {
+                //     let display = rx.recv()?;
 
-                let window = video_subsystem
-                    .window("Chip-8", X as u32 * scale, Y as u32 * scale)
-                    .position_centered()
-                    .borderless()
-                    .build()?;
-
-                let mut canvas = window.into_canvas().build()?;
-
-                canvas.set_scale(scale as f32, scale as f32)?;
-                canvas.clear();
-                loop {
-                    let display = rx.recv()?;
-
-                    for (x, _) in display.iter().enumerate() {
-                        for y in 0..display[x].len() {
-                            let colour = display[x][y];
-                            canvas.set_draw_color(match colour {
-                                0 => Color::WHITE,
-                                1 => Color::BLACK,
-                                _ => unimplemented!(),
-                            });
-                            canvas.draw_point(Point::new(x as i32, y as i32))?;
-                        }
-                    }
-                    canvas.present();
-                }
+                //     for (x, _) in display.iter().enumerate() {
+                //         for y in 0..display[x].len() {
+                //             let colour = display[x][y];
+                //             canvas.set_draw_color(match colour {
+                //                 0 => Color::WHITE,
+                //                 1 => Color::BLACK,
+                //                 _ => unimplemented!(),
+                //             });
+                //             canvas.draw_point(Point::new(x as i32, y as i32))?;
+                //         }
+                //     }
+                //     canvas.present();
+                // }
+                Ok(())
             },
         );
 

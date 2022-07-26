@@ -12,6 +12,7 @@ pub struct Chip8<const R: usize = 4096, const X: usize = 128, const Y: usize = 6
     i_reg: usize,
     /// Variable registers
     v_reg: [u8; 16],
+
     /// 12/16-bit stack
     stack: Stack,
 }
@@ -24,17 +25,16 @@ macro_rules! new {
 }
 pub(crate) use new;
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct State<const X: usize, const Y: usize> {
-    display_update: bool,
-    display: Option<[[u8; Y]; X]>,
+    pub display: Option<[[u8; Y]; X]>,
 }
 
 use crate::{opcode::Opcode, stack::Stack};
 #[allow(dead_code)]
 impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
     pub fn new() -> Chip8<R, X, Y> {
-        let mut chip8 = Chip8::<R, X, Y> {
+        Chip8::<R, X, Y> {
             memory: [0; R],
             pc: 0x200,
 
@@ -42,14 +42,17 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
             i_reg: 0,
             v_reg: [0; 16],
             stack: Stack::<32>::new(),
-        };
-
-        chip8.load_font();
-        chip8
+        }
+    }
+    pub const fn width(&self) -> usize {
+        X
+    }
+    pub const fn height(&self) -> usize {
+        Y
     }
 
-    fn load_font(&mut self) {
-        self.memory[0x50..=0x9F].copy_from_slice(&Chip8::<R, X, Y>::FONT);
+    pub fn load_font(&mut self, ref font: &[u8]) {
+        self.memory[0x50..=0x9F].copy_from_slice(font);
     }
 
     pub fn load_program<'a, T: Into<&'a [u8]>>(&mut self, input: T) {
@@ -58,15 +61,19 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
     }
 
     fn fetch(&mut self) -> Opcode {
-        // Bitwise shift the first part of the instruction by 8 and then bitwise OR it with the second part
         let opcode = Opcode::decode((self.memory[self.pc], self.memory[self.pc + 1]));
 
         self.pc += 2;
         opcode
     }
 
-    pub fn tick(&mut self) {}
-    fn decode_and_execute(&mut self, opcode: Opcode) {
+    pub fn tick(&mut self) -> State<X, Y> {
+        let opcode = self.fetch();
+        let state = self.execute(opcode);
+        state
+    }
+    fn execute(&mut self, opcode: Opcode) -> State<X, Y> {
+        let mut state = State { display: None };
         match opcode {
             Opcode::CLS => self.display = [[0; Y]; X],
             Opcode::RET => self.pc = self.stack.pop(),
@@ -126,6 +133,7 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
                     & y
             }
             Opcode::DRW(x, y, n) => {
+                println!("DRW: {:?}", (x, y, n));
                 let x = self.v_reg[x] as usize;
                 let y = self.v_reg[y] as usize;
                 let n = self.v_reg[n as usize] as usize;
@@ -141,10 +149,11 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
                             if self.display[x][y] == 1 {
                                 collision = true;
                             }
-                            self.display[x][y] ^= 1;
+                            self.display[x][y] ^= 0x1;
                         }
                     }
                 }
+                state.display = Some(self.display);
                 self.v_reg[0xF] = u8::from(collision);
             }
 
@@ -172,9 +181,12 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
             Opcode::UNKNOWN(_) => todo!(),
             _ => panic!(),
         }
+        state
     }
+}
 
-    const FONT: [u8; 80] = [
+pub mod font {
+    pub const STANDARD: [u8; 80] = [
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
         0x20, 0x60, 0x20, 0x20, 0x70, // 1
         0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2

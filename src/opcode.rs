@@ -1,5 +1,5 @@
 // http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[non_exhaustive]
 #[allow(non_camel_case_types)]
 pub enum Opcode {
@@ -49,7 +49,7 @@ pub enum Opcode {
 
     /// 8XY6 Set Vx = Vx SHR 1.
     SHR(usize, usize),
-    
+
     /// 8XY7 Set Vx = Vy - Vx, set VF = NOT borrow.
     SUB_REG(usize, usize),
 
@@ -103,9 +103,9 @@ pub enum Opcode {
 
     /// FX65 Read registers V0 through Vx from memory starting at location I.
     LD_I_REG(usize),
-    
+
     /// 0NNN Unknown opcode.
-    UNKNOWN(usize),
+    UNKNOWN(u16),
 }
 
 impl Opcode {
@@ -138,9 +138,13 @@ impl Opcode {
 
 impl From<u16> for Opcode {
     fn from(code: u16) -> Self {
-        match code {
-            0x0000 => Opcode::CLS,
-            0x000E => Opcode::RET,
+        match code & 0xF000 {
+            0x0 => match code & 0x00FF {
+                0xE0 => Opcode::CLS,
+                0xEE => Opcode::RET,
+                _ => Opcode::UNKNOWN(code),
+            },
+
             0x1000 => Opcode::JP(Opcode::nnn(code)),
             0x2000 => Opcode::CALL(Opcode::nnn(code)),
             0x3000 => Opcode::SE(Opcode::x(code), Opcode::kk(code)),
@@ -158,7 +162,7 @@ impl From<u16> for Opcode {
                 0x0006 => Opcode::SHR(Opcode::x(code), Opcode::y(code)),
                 0x0007 => Opcode::SUB_REG(Opcode::x(code), Opcode::y(code)),
                 0x000E => Opcode::SHL(Opcode::x(code), Opcode::y(code)),
-                _ => Opcode::UNKNOWN(code as usize),
+                _ => Opcode::UNKNOWN(code),
             },
             0x9000 => Opcode::SNE_REG(Opcode::x(code), Opcode::y(code)),
             0xA000 => Opcode::LD_I(Opcode::nnn(code)),
@@ -168,7 +172,7 @@ impl From<u16> for Opcode {
             0xE000 => match code & 0x00FF {
                 0x009E => Opcode::SKP(Opcode::x(code)),
                 0x00A1 => Opcode::SKNP(Opcode::x(code)),
-                _ => Opcode::UNKNOWN(code as usize),
+                _ => Opcode::UNKNOWN(code),
             },
             0xF000 => match code & 0x00FF {
                 0x0007 => Opcode::LD_DELAY(Opcode::x(code)),
@@ -180,9 +184,9 @@ impl From<u16> for Opcode {
                 0x0033 => Opcode::LD_BCD(Opcode::x(code)),
                 0x0055 => Opcode::LD_REG_I(Opcode::x(code)),
                 0x0065 => Opcode::LD_I_REG(Opcode::x(code)),
-                _ => Opcode::UNKNOWN(code as usize),
+                _ => Opcode::UNKNOWN(code),
             },
-            _ => Opcode::UNKNOWN(code as usize),
+            _ => Opcode::UNKNOWN(code),
         }
     }
 }

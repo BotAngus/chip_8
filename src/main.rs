@@ -9,7 +9,6 @@ mod chip8;
 mod input;
 mod opcode;
 mod stack;
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
 

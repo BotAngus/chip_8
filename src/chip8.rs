@@ -82,28 +82,28 @@ impl<const R: usize, const X: usize, const Y: usize> Chip8<R, X, Y> {
                 self.stack.push(self.pc);
                 self.pc = addr;
             }
-            Opcode::SE(x, y) => {
-                if self.v_reg[x] == y {
+            Opcode::SE(x, kk) => {
+                if self.v_reg[x] == kk {
                     self.pc += 2;
                 }
             }
-            Opcode::SNE(x, y) => {
-                if self.v_reg[x] != y {
+            Opcode::SNE(x, kk) => {
+                if self.v_reg[x] != kk {
                     self.pc += 2;
                 }
             }
-            Opcode::LD(x, y) => self.v_reg[x] = y,
-            Opcode::ADD(x, y) => {
-                self.v_reg[x] = self.v_reg[x].wrapping_add(y);
+            Opcode::LD(x, kk) => self.v_reg[x] = kk,
+            Opcode::ADD(x, kk) => {
+                self.v_reg[x] = self.v_reg[x].wrapping_add(kk);
             }
             Opcode::OR(x, y) => self.v_reg[x] |= self.v_reg[y],
             Opcode::AND(x, y) => self.v_reg[x] &= self.v_reg[y],
             Opcode::XOR(x, y) => self.v_reg[x] ^= self.v_reg[y],
             Opcode::ADD_REG(x, y) => {
-                let (value, underflow) = self.v_reg[x].overflowing_add(self.v_reg[y]);
+                let (value, overflow) = self.v_reg[x].overflowing_add(self.v_reg[y]);
 
                 self.v_reg[x] = value;
-                self.v_reg[0x0F] = u8::from(underflow);
+                self.v_reg[0x0F] = u8::from(overflow);
             }
             Opcode::SUB(x, y) => {
                 let (value, underflow) = self.v_reg[x].overflowing_sub(self.v_reg[y]);

@@ -1,111 +1,121 @@
+pub type Address = usize;
+pub type Register = usize;
+pub type Byte = u8;
 // http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[non_exhaustive]
 #[allow(non_camel_case_types)]
 pub enum Opcode {
-    /// 00E0 Clear the display.
+    /// 0NNN Jump to a machine code routine at nnn
+    SYS_NNN(Address),
+
+    /// 00E0 Clear the display
     CLS,
 
-    /// 00EE Return from a subroutine.
+    /// 00EE Return from a subroutine
+    /// The interpreter sets the program counter to the address at the top of the stack, then subtracts 1 from the stack pointer
     RET,
 
-    /// 1NNN The interpreter sets the program counter to nnn
-    JP(usize),
+    /// 1NNN Jump to location nnn
+    /// The interpreter sets the program counter to nnn
+    JP_NNN(Address),
 
-    /// 2NNN Call subroutine at nnn.
-    CALL(usize),
+    /// 2NNN Call subroutine at nnn
+    /// The interpreter increments sthe stack pointer, then puts the current PC on the top of the stack. The PC is then set to nnn
+    CALL_NNN(Address),
 
-    /// 3XKK Skip next instruction if Vx = kk.
-    SE(usize, u8),
+    /// 3XNN Skip next instruction if Vx = kk
+    /// The interpreter compares register Vx to kk, and if they are equal, increments the program counter by 2.
+    SE_XNN(Register),
 
-    /// 4XKK Skip next instruction if Vx != kk.
-    SNE(usize, u8),
-    /// 5XY0 Skip next instruction if Vx = Vy.
-    SE_REG(usize, usize),
+    /// 4XNN Skip next instruction if Vx != kk
+    /// The interpreter compares register Vx to kk, and if they are not equal, increments the program counter by 2.
+    SNE_XNN(Register, Byte),
 
-    /// 6XKK Set Vx = kk.
-    LD(usize, u8),
+    /// 5XY0 Skip next instruction if Vx = Vy
+    /// The interpreter compares register Vx to register Vy, and if they are equal, increments the program counter by 2.
+    SE_XY(Register, Register),
 
-    /// 7XKK Set Vx = Vx + kk.
-    ADD(usize, u8),
+    /// 6XNN Set Vx = kk
+    /// The interpreter puts the value kk into register Vx.
+    LD_XNN(Register, Byte),
 
-    /// 8XY0 Set Vx = Vy.
-    LD_REG(usize, usize),
+    /// 7XNN Set Vx = Vx + kk
+    /// Adds the value kk to the value of register Vx, then stores the result in Vx.
+    ADD_XNN(Register, Byte),
 
-    /// 8XY1 Set Vx = Vx | Vy.
-    OR(usize, usize),
+    /// 8XY0 Set Vx = Vy
+    /// Stores the value of register Vy in register Vx.
+    LD_XY(Register, Register),
 
-    /// 8XY2 Set Vx = Vx & Vy.
-    AND(usize, usize),
+    /// 8XY1 Set Vx = Vx OR Vy
+    /// Performs a bitwise OR on the values of Vx and Vy
+    OR_XY(Register, Register),
 
-    /// 8XY3 Set Vx = Vx ^ Vy.
-    XOR(usize, usize),
+    /// 8XY2 Set Vx = Vx AND Vy
+    /// Performs a bitwise AND on the values of Vx and Vy
+    AND_XY(Register, Register),
 
-    /// 8XY4 Set Vx = Vx + Vy, set VF = carry.
-    ADD_REG(usize, usize),
+    /// 8XY3 Set Vx = Vx XOR Vy
+    /// Performs a bitwise XOR on the values of Vx and Vy
+    XOR_XY(Register, Register),
 
-    /// 8XY5 Set Vx = Vx - Vy, set VF = NOT borrow.
-    SUB(usize, usize),
+    /// 8XY4 Adds the value of Vy to the value of Vx, then stores the result in Vx. Vf is set to 1 when there's a carry, and to 0 when there isn't.
+    ADD_XY(Register, Register),
 
-    /// 8XY6 Set Vx = Vx SHR 1.
-    SHR(usize, usize),
+    /// 8XY5 Vx = Vx - Vy, Vf = NOT borrow
+    /// If Vx > Vy, then Vf is set to 1, otherwise 0. Then Vy is subtracted from Vx, and the results stored in Vx.
+    SUB_XY(Register, Register),
 
-    /// 8XY7 Set Vx = Vy - Vx, set VF = NOT borrow.
-    SUB_REG(usize, usize),
+    /// 8XY6 Stores the least significant bit of Vy in Vf and shifts Vy right by 1. Vx = Vy >> 1
+    SHR_XY(Register, Register),
 
-    /// 8XYE Set Vx = Vx SHL 1.
-    SHL(usize, usize),
+    /// 8XY7 Vx = Vy - Vx, Vf = NOT borrow
+    /// If Vy > Vx, then Vf is set to 1, otherwise 0. Then Vx is subtracted from Vy, and the results stored in Vx.
+    SUBN_XY(Register, Register),
 
-    /// 9XY0 Skip next instruction if Vx != Vy.
-    SNE_REG(usize, usize),
+    /// 8XYE Stores the most significant bit of Vy in Vf and shifts Vy left by 1. Vx = Vy << 1
+    SHL_XY(Register, Register),
 
-    /// ANNN Set I = nnn.
-    LD_I(usize),
+    /// 9XY0 Skip next instruction if Vx != Vy
+    /// The interpreter compares register Vx to register Vy, and if they are not equal, increments the program counter by 2.
+    SNE_XY(Register, Register),
 
-    /// BNNN Jump to location nnn + V0.
-    JP_V0(usize),
+    /// ANNN Set I = nnn
+    /// The interpreter sets the address register I to nnn.
+    LD_I_NNN(Address),
 
-    /// CXKK Set Vx = random byte & kk.
-    RND(usize, u8),
+    /// BNNN Jump to location nnn + V0
+    /// The interpreter sets the program counter to nnn plus the value of V0
+    JP_V0_NNN(Address),
 
-    /// DXYN Draw a sprite at coordinate (Vx, Vy), with width 8 pixels and height n pixels.
-    DRW(usize, usize, u8),
+    /// CXNN Set Vx = random byte AND kk
+    /// The interpreter generates a random number from 0 to 255, which is then ANDed with the value kk. The results are stored in register Vx.
+    RND_XNN(Register, Byte),
 
-    /// EX9E Skip next instruction if key with the value of Vx is pressed.
-    SKP(usize),
+    /// DXYN Display n-byte sprite starting at memory location I at (Vx, Vy), set Vf = collision
+    /// The interpreter reads n bytes from memory, starting at the address stored in I. These bytes are then displayed as sprites on screen at coordinates (Vx, Vy). Sprites are 8 pixels wide and 8 pixels tall. If an intersection is detected, Vf is set to 1, otherwise it is
+    DRW_XYN(Register, Register, Byte),
 
-    /// EXA1 Skip next instruction if key with the value of Vx is not pressed.
-    SKNP(usize),
+    /// EX9E Skip next instruction if key with the value of Vx is pressed
+    /// Checks the keyboard, and if the key stored in Vx is currently pressed, increments the program counter by 2.
+    SKP_X(Register),
 
-    /// FX07 Set Vx = delay timer value.
-    LD_DELAY(usize),
+    /// EXA1 Skip next instruction if key with the value of Vx is not pressed
+    /// Checks the keyboard, and if the key stored in Vx is currently not pressed, increments the program counter by 2.
+    SKNP_X(Register),
 
-    /// FX0A Wait for a key press, store the value of the key in Vx.
-    LD_KEY(usize),
+    /// FX07 Set Vx = delay timer value
+    /// The interpreter copies the value of DT to Vx.
+    LD_X_DT(Register),
 
-    /// FX15 Set delay timer = Vx.
-    LD_DELAY_REG(usize),
+    /// FX0A Wait for a key press, store the value of the key in Vx
+    /// The interpreter sets the value of Vx to the value of the key pressed.
+    LD_X_KEY(Register),
 
-    /// FX18 Set sound timer = Vx.
-    LD_SOUND_REG(usize),
-
-    /// FX1E Set I = I + Vx.
-    ADD_I(usize),
-
-    /// FX29 Set I = location of sprite for digit Vx.
-    LD_FONT(usize),
-
-    /// FX33 Set I = location of BCD representation of Vx.
-    LD_BCD(usize),
-
-    /// FX55 Store registers V0 through Vx in memory starting at location I.
-    LD_REG_I(usize),
-
-    /// FX65 Read registers V0 through Vx from memory starting at location I.
-    LD_I_REG(usize),
-
-    /// 0NNN Unknown opcode.
-    UNKNOWN(u16),
+    /// FX15 Set delay timer = Vx
+    LD_DT_X(Register),
+    
 }
 
 impl Opcode {

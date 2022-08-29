@@ -1,4 +1,4 @@
-use crate::stack::Stack;
+use crate::{opcode::Opcode, screen::Screen, stack::Stack};
 
 pub struct Chip8 {
     memory: [u8; 4096],
@@ -45,6 +45,20 @@ impl Chip8 {
             0xF0, 0x80, 0xF0, 0x80, 0x80, // F
         ];
         self.memory[0x50..=0x9F].copy_from_slice(&font);
+    }
+
+    fn fetch(&mut self) -> Opcode {
+        let opcode: Opcode = (self.memory[self.pc], self.memory[self.pc + 1])
+            .try_into()
+            .unwrap();
+        self.pc += 2;
+        opcode
+    }
+
+    fn execute(&mut self, opcode: Opcode) {
+        use crate::opcode::{OpcodeData::*, OpcodeName::*};
+        let mut screen = None::<Screen>;
+        todo!()
     }
 }
 

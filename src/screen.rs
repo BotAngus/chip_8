@@ -1,9 +1,9 @@
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Screen {
+pub struct Display {
     pub data: [[u8; 64]; 128],
 }
 
-impl Screen {
+impl Display {
     pub const fn new() -> Self {
         Self {
             data: [[0; 64]; 128],

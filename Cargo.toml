@@ -12,3 +12,4 @@ features = ["bundled"]
 
 [profile.release]
 lto = true
+strip = true

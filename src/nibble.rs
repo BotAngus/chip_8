@@ -1,4 +1,7 @@
-use crate::types::{Address, Register, X, Y};
+use crate::{
+    address::Address,
+    register::{Register, X, Y},
+};
 
 pub(crate) trait NibbleExt: Sized + std::ops::BitAnd<u16, Output = u16> {
     fn n(self) -> u8 {

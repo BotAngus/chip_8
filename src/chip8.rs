@@ -1,8 +1,12 @@
+use std::time::SystemTime;
+
+use sdl2::sys::Screen;
+
 use crate::{
     address::Address,
     memory::Memory,
     opcode::Opcode,
-    register::{Register, Registers, I, X, Y},
+    register::{Register, Registers, I, T, X, Y},
     screen::Display,
     stack::Stack,
 };
@@ -16,11 +20,12 @@ pub struct Chip8 {
 }
 
 impl Chip8 {
+    const F: Register<T> = Register::<T>::from(0xF_usize);
     pub fn new() -> Self {
         let mut chip = Self {
             memory: Memory::new(),
             pc: 0x200_usize.into(), // 512
-            i: 0.into(),
+            i: 0_usize.into(),
             stack: Stack::new(),
             v: Registers::new(),
         };
@@ -77,27 +82,90 @@ impl Chip8 {
             Opcode::CallAddress(address) => self.stack.push(address),
             Opcode::SeVxByte(x, b) => {
                 if self.v[x] == b {
-                    self.pc += 2_usize.into();
+                    self.pc += Address(2);
                 }
             }
-            Opcode::SneVxByte(x, b) => todo!(),
-            Opcode::SeVxVy(_, _) => todo!(),
-            Opcode::LdVxByte(_, _) => todo!(),
-            Opcode::AddVxByte(_, _) => todo!(),
-            Opcode::LdVxVy(_, _) => todo!(),
-            Opcode::OrVxVy(_, _) => todo!(),
-            Opcode::AndVxVy(_, _) => todo!(),
-            Opcode::XorVxVy(_, _) => todo!(),
-            Opcode::AddVxVy(_, _) => todo!(),
-            Opcode::SubVxVy(_, _) => todo!(),
-            Opcode::ShrVxVy(_, _) => todo!(),
-            Opcode::SubnVxVy(_, _) => todo!(),
-            Opcode::ShlVxVy(_, _) => todo!(),
-            Opcode::SneVxVy(_, _) => todo!(),
-            Opcode::LdIAddress(_) => todo!(),
-            Opcode::JpV0Address(_) => todo!(),
-            Opcode::RndVxByte(_, _) => todo!(),
-            Opcode::DrwVxVyNibble(_, _, _) => todo!(),
+            Opcode::SneVxByte(x, b) => {
+                if self.v[x] != b {
+                    self.pc += Address(2);
+                }
+            }
+            Opcode::SeVxVy(x, y) => {
+                if self.v[x] == self.v[y] {
+                    self.pc += Address(2);
+                }
+            }
+            Opcode::LdVxByte(x, b) => self.v[x] = b,
+            Opcode::AddVxByte(x, b) => self.v[x] += b,
+            Opcode::LdVxVy(x, y) => self.v[x] = self.v[y],
+            Opcode::OrVxVy(x, y) => self.v[x] |= self.v[y],
+            Opcode::AndVxVy(x, y) => self.v[x] &= self.v[y],
+            Opcode::XorVxVy(x, y) => self.v[x] ^= self.v[y],
+            Opcode::AddVxVy(x, y) => {
+                let (value, overflow) = self.v[x].overflowing_add(self.v[y]);
+                self.v[x] += value;
+                self.v[Self::F] = overflow.into();
+            }
+            Opcode::SubVxVy(x, y) => {
+                if self.v[x] > self.v[y] {
+                    self.v[Self::F] = 1;
+                } else {
+                    self.v[Self::F] = 0;
+                }
+                self.v[x].wrapping_sub(self.v[y]);
+            }
+            Opcode::ShrVxVy(x, y) => {
+                self.v[Self::F] = self.v[x] & 0x1;
+                self.v[x] >>= 0x1;
+            }
+            Opcode::SubnVxVy(x, y) => {
+                let (value, underflow) = self.v[x].overflowing_sub(self.v[y]);
+                self.v[x] = value;
+                self.v[Self::F] = underflow.into()
+            }
+            Opcode::ShlVxVy(x, y) => {
+                self.v[Self::F] = self.v[x] & 0b10000000;
+                self.v[x] <<= 0x1;
+            }
+            Opcode::SneVxVy(x, y) => {
+                if self.v[x] != self.v[y] {
+                    self.pc += Address(2);
+                }
+            }
+            Opcode::LdIAddress(address) => self.i = address.into(),
+            Opcode::JpV0Address(address) => {
+                self.pc = address + self.v[Register::<T>::from(0_usize)].into()
+            }
+            Opcode::RndVxByte(x, b) => {
+                self.v[x] = SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos() as u8
+                    & b
+            }
+            Opcode::DrwVxVyNibble(x, y, n) => {
+                let mut display = Display::new();
+                let x = self.v[x];
+                let y = self.v[y];
+                let n = self.v[Register::<T>::from(n)];
+
+                let mut collision = false;
+                for i in 0..n {
+                    let i: Address = self.i.into();
+                    let sprite = self.memory[self.i.into() + i.into()];
+                    for j in 0..8_u8 {
+                        let bit = (sprite >> (7 - j)) & 1;
+                        let x = (x + j) % 128;
+                        let y = (y + i) % 64;
+                        if bit == 1 {
+                            if display.data[x as usize][y as usize] == 1 {
+                                collision = true;
+                            }
+                            display.data[x as usize][y as usize] ^= 0x1;
+                        }
+                    }
+                }
+            }
             Opcode::SkpVx(_) => todo!(),
             Opcode::SknpVx(_) => todo!(),
             Opcode::LdVxDt(_) => todo!(),
@@ -112,6 +180,4 @@ impl Chip8 {
         }
         screen
     }
-
-
 }

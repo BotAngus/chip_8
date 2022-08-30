@@ -9,4 +9,5 @@ impl Display {
             data: [[0; 64]; 128],
         }
     }
+
 }

@@ -36,6 +36,9 @@ pub struct Y;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct I;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct T;
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Register<T> {
     value: Address,
@@ -48,8 +51,11 @@ impl<T> Register<T> {
     }
 }
 
-impl<T> From<u16> for Register<T> {
-    fn from(value: u16) -> Self {
+impl<U, T> From<U> for Register<T>
+where
+    U: Into<Address>,
+{
+    fn from(value: U) -> Self {
         Self {
             value: value.into(),
             _marker: PhantomData,
@@ -57,17 +63,4 @@ impl<T> From<u16> for Register<T> {
     }
 }
 
-impl<T> From<Register<T>> for usize {
-    fn from(reg: Register<T>) -> Self {
-        reg.value.into()
-    }
-}
 
-impl<T> From<Address> for Register<T> {
-    fn from(value: Address) -> Self {
-        Self {
-            value,
-            _marker: PhantomData,
-        }
-    }
-}
